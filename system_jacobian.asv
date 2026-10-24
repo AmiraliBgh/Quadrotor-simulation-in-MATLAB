@@ -1,0 +1,57 @@
+function [A,B,A_num,B_num] = task4_linearization()
+% =====================================================
+% TASK 4 – LINEARIZATION USING MAIN SYSTEM
+% =====================================================
+
+clc;
+
+%% -----------------------------------------------------
+% 1) Get system from system_model
+% -----------------------------------------------------
+
+P = quad_params();                 % parameters from main
+f = @(x,u) quad_dynamics(x,u,P);   % nonlinear system handle
+
+%% -----------------------------------------------------
+% 2) Symbolic variables
+% -----------------------------------------------------
+syms x [12 1] real
+syms u [4 1] real
+
+%% -----------------------------------------------------
+% 3) Symbolic nonlinear model via main dynamics
+% -----------------------------------------------------
+f_sym = quad_dynamics(x,u,P);
+
+%% -----------------------------------------------------
+% 4) Jacobian matrices
+% -----------------------------------------------------
+A = jacobian(f_sym, x);
+B = jacobian(f_sym, u);
+
+disp('Symbolic Jacobians computed')
+
+%% -----------------------------------------------------
+% 5) Linearization at Hover
+% -----------------------------------------------------
+xe = zeros(12,1);
+ue = [P.m*P.g; 0; 0; 0];
+
+A_num = double(subs(A, [x;u], [xe;ue]));
+B_num = double(subs(B, [x;u], [xe;ue]));
+
+disp('A (hover):'); disp(A_num)
+disp('B (hover):'); disp(B_num)
+
+%% -----------------------------------------------------
+% 6) Taylor Expansion Validation
+% -----------------------------------------------------
+dx = 1e-3*randn(12,1);
+du = zeros(4,1);
+
+f_nl  = f(xe+dx, ue+du);
+f_lin = A_num*dx + B_num*du;
+
+fprintf('Taylor error norm = %.2e\n', norm(f_nl - f_lin));
+
+end

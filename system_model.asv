@@ -1,0 +1,183 @@
+function SYS = system_model(runTasks)
+% =====================================================
+% MAIN FILE – QUADROTOR SYSTEM MODEL (TASK 1–3)
+% =====================================================
+clc; close all;
+if nargin==0
+    runTasks = true;
+end
+
+% --------------------
+% Load parameters
+% --------------------
+P = quad_params();
+
+% --------------------
+% Store system info for later tasks
+% --------------------
+SYS.P = P;
+SYS.f = @(x,u) quad_dynamics(x,u,P);
+
+% --------------------
+% Run tasks
+% --------------------
+if runTasks
+disp('Running Task 1 ...')
+quadrotor_task1(P);
+
+disp('Running Task 2 ...')
+SYS.constraints = quadrotor_task2_constraints(P);
+
+disp('Running Task 3 ...')
+SYS.operating_points = quadrotor_task3_operating_points(P);
+
+else
+    
+end
+% =====================================================
+% PARAMETERS DEFINING
+% =====================================================
+function P = quad_params()
+P.m  = 1;
+P.g  = 9.81;
+P.L  = 0.2;
+P.Ix = 0.02;
+P.Iy = 0.02;
+P.Iz = 0.04;
+end
+
+% =====================================================
+% TASK 1 – NONLINEAR MODELING & SIMULATION
+% =====================================================
+function quadrotor_task1(P)
+
+x0 = zeros(12,1);
+
+% slightly excite system so plots are NOT zero
+u = [1.1*P.m*P.g; 0.05; 0; 0];
+
+tspan = [0 5];
+[t, x] = ode45(@(t,x) quad_dynamics(x,u,P), tspan, x0);
+
+figure;
+plot(t, x(:,3),'LineWidth',2)
+xlabel('Time (s)')
+ylabel('z (m)')
+title('Task 1: Altitude Response')
+grid on
+
+figure;
+plot(t, x(:,4)*180/pi,'LineWidth',2)
+xlabel('Time (s)')
+ylabel('\phi (deg)')
+title('Task 1: Roll Angle')
+grid on
+
+figure;
+plot(t, x(:,6)*180/pi,'LineWidth',2)
+xlabel('Time (s)')
+ylabel('\psi (deg)')
+title('Task 1: Yaw Angle')
+grid on
+
+end
+
+% =====================================================
+% TASK 2 – CONSTRAINTS
+% =====================================================
+function C = quadrotor_task2_constraints(P)
+
+C.U.min = [0; -0.2; -0.2; -0.1];
+C.U.max = [2*P.m*P.g; 0.2; 0.2; 0.1];
+
+C.Y.min = [-10; -10; 0; -30*pi/180; -30*pi/180; -pi];
+C.Y.max = [ 10;  10;10;  30*pi/180;  30*pi/180;  pi];
+
+C.X.min = [-10;-10;0; -30*pi/180;-30*pi/180;-pi; -5;-5;-3; -5;-5;-3];
+C.X.max = [ 10; 10;10;  30*pi/180; 30*pi/180; pi;  5; 5; 3;  5; 5; 3];
+
+disp('=== TASK 2 LOADED ===')
+disp('Input, output and state constraints defined')
+
+end
+
+% =====================================================
+% TASK 3 – OPERATING POINTS
+% =====================================================
+function OP = quadrotor_task3_operating_points(P)
+
+% --------------------
+% Hover equilibrium
+% --------------------
+OP.hover.xe = zeros(12,1);
+OP.hover.ue = [P.m*P.g; 0; 0; 0];
+
+% --------------------
+% Vertical climb equilibrium
+% --------------------
+OP.climb.xe = zeros(12,1);
+OP.climb.xe(9) = 1;
+OP.climb.ue = OP.hover.ue;
+
+% --------------------
+% Verify equilibria
+% --------------------
+xdot_hover = quad_dynamics(OP.hover.xe, OP.hover.ue, P);
+xdot_climb = quad_dynamics(OP.climb.xe, OP.climb.ue, P);
+
+disp('xdot at hover:'); disp(xdot_hover')
+disp('xdot at climb:'); disp(xdot_climb')
+
+% --------------------
+% Phase portrait (z, vz)
+% --------------------
+[z,vz] = meshgrid(-1:0.2:1,-1:0.2:1);
+dz  = vz;
+dvz = P.g - OP.hover.ue(1)/P.m;
+
+figure;
+quiver(z,vz,dz,dvz*ones(size(dz)))
+xlabel('z'); ylabel('v_z')
+title('Task 3: Phase Portrait near Hover')
+grid on
+
+end
+
+% =====================================================
+% NONLINEAR QUADROTOR DYNAMICS
+% =====================================================
+function xdot = quad_dynamics(x,u,P)
+
+phi   = x(4); 
+theta = x(5); 
+psi   = x(6);
+
+vx = x(7); 
+vy = x(8); 
+vz = x(9);
+
+p = x(10); 
+q = x(11); 
+r = x(12);
+
+u1 = u(1); 
+u2 = u(2); 
+u3 = u(3); 
+u4 = u(4);
+
+% Translational accelerations
+ax = -(cos(phi)*sin(theta)*cos(psi) + sin(phi)*sin(psi))*(u1/P.m);
+ay = -(cos(phi)*sin(theta)*sin(psi) - sin(phi)*cos(psi))*(u1/P.m);
+az = P.g - cos(phi)*cos(theta)*(u1/P.m);
+
+% Rotational accelerations
+pd = q*r*(P.Iy-P.Iz)/P.Ix + (P.L/P.Ix)*u2;
+qd = p*r*(P.Iz-P.Ix)/P.Iy + (P.L/P.Iy)*u3;
+rd = p*q*(P.Ix-P.Iy)/P.Iz + u4/P.Iz;
+
+% State derivative
+xdot = [vx; vy; vz; ...
+        p; q; r; ...
+        ax; ay; az; ...
+        pd; qd; rd];
+end
